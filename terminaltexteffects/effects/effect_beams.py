@@ -187,6 +187,16 @@ class BeamsConfig(ArgsDataClass):
 
     "int : Speed of the final wipe as measured in diagonal groups activated per frame."
 
+    beam_group_size_range: tuple[int, int] = ArgField(
+        cmd_name="--beam-group-size-range",
+        type_parser=argvalidators.IntRange.type_parser,
+        default=(1, 5),
+        metavar=argvalidators.IntRange.METAVAR,
+        help="Number of beams in each group. (Range)",
+    )  # type: ignore[assignment]
+    
+    "tuple[int, int] : Number of beams that can be generated with each pass."
+
     @classmethod
     def get_effect_class(cls):
         return Beams
@@ -286,7 +296,7 @@ class BeamsIterator(BaseEffectIterator[BeamsConfig]):
             if self.phase == "beams":
                 if not self.delay:
                     if self.pending_groups:
-                        for _ in range(random.randint(1, 5)):
+                        for _ in random(range(self.config.beam_group_size_range)):
                             if self.pending_groups:
                                 self.active_groups.append(self.pending_groups.pop(0))
                     self.delay = self.config.beam_delay
