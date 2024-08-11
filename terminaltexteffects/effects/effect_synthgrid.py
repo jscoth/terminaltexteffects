@@ -142,6 +142,32 @@ class SynthGridConfig(ArgsDataClass):
     )  # type: ignore[assignment]
     "float : Maximum percentage of blocks to have active at any given time."
 
+    grid_speed_modifier: float = ArgField(
+        cmd_name="--grid-speed-modifier",
+        type_parser=argvalidators.PositiveFloat.type_parser,
+        default=1.0,
+        metavar=argvalidators.PositiveFloat.METAVAR,
+        help="Speed which the grid lines will extend and collapse.",
+    )  # type: ignore[assignment]
+    "float : percentage of default speed at which lines will move"    
+
+    max_generation_frames: int = ArgField(
+        cmd_name="--max-generation-frames",
+        type_parser=argvalidators.NonNegativeInt.type_parser,
+        default=30,
+        metavar=argvalidators.NonNegativeInt.METAVAR,
+        help="Max number of frames to spend on the random character effect",
+    )  # type: ignore[assignment]
+    "int: maximum number of character generation frames"    
+
+    no_gridlines: bool = ArgField(
+        cmd_name="--no-gridlines",
+        action="store_true",
+        help="Do not show gridlines",
+    )  # type: ignore[assignment]
+    "bool : Do not show gridlines"
+     
+
     @classmethod
     def get_effect_class(cls):
         return SynthGrid
@@ -192,9 +218,9 @@ class GridLine:
 
     def extend(self) -> None:
         if self.direction == "horizontal":
-            count = 3
+            count = 3 * int(self.args.grid_speed_modifier)
         else:
-            count = 1
+            count = 1 * int(self.args.grid_speed_modifier)
         for _ in range(count):
             if self.collapsed_characters:
                 next_char = self.collapsed_characters.pop(0)
@@ -203,9 +229,9 @@ class GridLine:
 
     def collapse(self) -> None:
         if self.direction == "horizontal":
-            count = 3
+            count = 3 * int(self.args.grid_speed_modifier)
         else:
-            count = 1
+            count = 1 * int(self.args.grid_speed_modifier)
         if not self.collapsed_characters:
             self.extended_characters = self.extended_characters[::-1]
         for _ in range(count):
@@ -352,14 +378,46 @@ class SynthGridIterator(BaseEffectIterator[SynthGridConfig]):
                     self.pending_groups.append((len(self.pending_groups), characters_in_block))
                 prev_column_index = column_index
             prev_row_index = row_index
+
+        # TODO add pending groups to list
+        # do all the work at once
+        
+        # combine some groups
+        if len(self.pending_groups) > 16:
+            for _ in range (0,2): #TODO handle errror in range
+                
+                start = random.randint(0,len(row_indexes))
+
+                self.pending_groups[start] = [
+                    self.pending_groups[start][0] + self.pending_groups[start + 1][0],
+                    self.pending_groups[start][1] + self.pending_groups[start + 1][1]
+                    ]
+                
+
+                # self.pending_groups[start] = [
+                # self.pending_groups[start][0] + self.pending_groups[start + len(column_indexes)][0],
+                # self.pending_groups[start][1] + self.pending_groups[start + len(column_indexes)][1]
+                # ]
+
+                # self.pending_groups[start] = [
+                # self.pending_groups[start][0] + self.pending_groups[start + len(column_indexes) + 1][0],
+                # self.pending_groups[start][1] + self.pending_groups[start + len(column_indexes) + 1][1]
+                # ]
+
+                self.pending_groups.pop(start + 1)
+                # self.pending_groups.pop(start + len(column_indexes) -1)
+                # self.pending_groups.pop(start + len(column_indexes) -1)
+
+
+
         for group_number, group in self.pending_groups:
             self.group_tracker[group_number] = 0
             for character in group:
                 dissolve_scn = character.animation.new_scene()
-                for _ in range(random.randint(15, 30)):
+                for _ in range(random.randint(int(self.config.max_generation_frames / 2), self.config.max_generation_frames)):
                     dissolve_scn.add_frame(
                         random.choice(self.config.text_generation_symbols),
-                        3,
+                        2,  
                         color=random.choice(text_gradient.spectrum),
                     )
                 dissolve_scn.add_frame(character.input_symbol, 1, color=text_gradient_mapping[character.input_coord])
@@ -371,7 +429,13 @@ class SynthGridIterator(BaseEffectIterator[SynthGridConfig]):
                     EventHandler.Callback(self.update_group_tracker, group_number),
                 )
         random.shuffle(self.pending_groups)
-        self._phase = "grid_expand"
+        
+        if self.config.no_gridlines:
+            self._phase = "add_chars"
+
+        else:
+            self._phase = "grid_expand"
+
         self._total_group_count = len(self.pending_groups)
         if not self._total_group_count:
             for character in self.terminal.get_characters():
@@ -402,7 +466,10 @@ class SynthGridIterator(BaseEffectIterator[SynthGridConfig]):
                         self.active_characters.append(char)
                         self.group_tracker[group_number] += 1
                 if not self.pending_groups and not self.active_characters and not self._active_groups:
-                    self._phase = "collapse"
+                    if self.config.no_gridlines:
+                        self._phase = "complete"
+                    else: 
+                        self._phase = "collapse"
             elif self._phase == "collapse":
                 if not all([grid_line.is_collapsed() for grid_line in self.grid_lines]):
                     for grid_line in self.grid_lines:
