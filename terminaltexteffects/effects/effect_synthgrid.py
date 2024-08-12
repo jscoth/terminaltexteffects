@@ -166,7 +166,20 @@ class SynthGridConfig(ArgsDataClass):
         help="Do not show gridlines",
     )  # type: ignore[assignment]
     "bool : Do not show gridlines"
-     
+
+    no_intro: bool = ArgField(
+        cmd_name="--no-intro",
+        action="store_true",
+        help="Do not show gridline entry",
+    )  # type: ignore[assignment]
+    "bool : Do not animate gridline entry"
+
+    no_outro: bool = ArgField(
+        cmd_name="--no-outro",
+        action="store_true",
+        help="Do not show gridline exit",
+    )  # type: ignore[assignment]
+    "bool : Do not animate gridline exit"  
 
     @classmethod
     def get_effect_class(cls):
@@ -217,7 +230,9 @@ class GridLine:
         self.extended_characters: list[EffectCharacter] = []
 
     def extend(self) -> None:
-        if self.direction == "horizontal":
+        if self.args.no_intro:
+            count = 30
+        elif self.direction == "horizontal":
             count = 3 * int(self.args.grid_speed_modifier)
         else:
             count = 1 * int(self.args.grid_speed_modifier)
@@ -228,7 +243,9 @@ class GridLine:
                 self.extended_characters.append(next_char)
 
     def collapse(self) -> None:
-        if self.direction == "horizontal":
+        if self.args.no_outro:
+            count = 30
+        elif self.direction == "horizontal":
             count = 3 * int(self.args.grid_speed_modifier)
         else:
             count = 1 * int(self.args.grid_speed_modifier)
