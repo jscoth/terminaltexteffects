@@ -39,6 +39,7 @@ class BeamsConfig(ArgsDataClass):
         beam_row_symbols (tuple[str, ...] | str): Symbols to use for the beam effect when moving along a row. Strings will be used in sequence to create an animation.
         beam_column_symbols (tuple[str, ...] | str): Symbols to use for the beam effect when moving along a column. Strings will be used in sequence to create an animation.
         beam_delay (int): Number of frames to wait before adding the next group of beams. Beams are added in groups of size random(1, 5). Valid values are n > 0.
+        beam_group_size_range (tuple[int, int]): Number of beams that can be generated with each pass.
         beam_row_speed_range (tuple[int, int]): Speed range of the beam when moving along a row. Valid values are n > 0.
         beam_column_speed_range (tuple[int, int]): Speed range of the beam when moving along a column. Valid values are n > 0.
         beam_gradient_stops (tuple[Color, ...]): Tuple of colors for the beam, a gradient will be created between the colors.
@@ -78,10 +79,20 @@ class BeamsConfig(ArgsDataClass):
         type_parser=argvalidators.PositiveInt.type_parser,
         default=10,
         metavar=argvalidators.PositiveInt.METAVAR,
-        help="Number of frames to wait before adding the next group of beams. Beams are added in groups of size random(1, 5).",
+        help="Number of frames to wait before adding 11 the next group of beams. Beams are added in groups of size random(1, 5).",
     )  # type: ignore[assignment]
 
     "int : Number of frames to wait before adding the next group of beams. Beams are added in groups of size random(1, 5)."
+
+    beam_group_size_range: tuple[int, int] = ArgField(
+        cmd_name="--beam-group-size-range",
+        type_parser=argvalidators.IntRange.type_parser,
+        default=(1, 5),
+        metavar=argvalidators.IntRange.METAVAR,
+        help="Number of beams in each group. (Range)",
+    )  # type: ignore[assignment]
+    
+    "tuple[int, int] : Number of beams that can be generated with each pass."
 
     beam_row_speed_range: tuple[int, int] = ArgField(
         cmd_name="--beam-row-speed-range",
@@ -187,16 +198,6 @@ class BeamsConfig(ArgsDataClass):
 
     "int : Speed of the final wipe as measured in diagonal groups activated per frame."
 
-    beam_group_size_range: tuple[int, int] = ArgField(
-        cmd_name="--beam-group-size-range",
-        type_parser=argvalidators.IntRange.type_parser,
-        default=(1, 5),
-        metavar=argvalidators.IntRange.METAVAR,
-        help="Number of beams in each group. (Range)",
-    )  # type: ignore[assignment]
-    
-    "tuple[int, int] : Number of beams that can be generated with each pass."
-
     @classmethod
     def get_effect_class(cls):
         return Beams
@@ -295,8 +296,20 @@ class BeamsIterator(BaseEffectIterator[BeamsConfig]):
         if self.phase != "complete" or self.active_characters:
             if self.phase == "beams":
                 if not self.delay:
+
+                    #skip generation if the range is one number wide
+                    if (self.config.beam_group_size_range[0] == self.config.beam_group_size_range[1]):
+                        range_max = range(0,self.config.beam_group_size_range[0])
+                    else: 
+                        range_max = range(
+                                            0,
+                                            random.randint(self.config.beam_group_size_range[0],
+                                                           self.config.beam_group_size_range[1])
+                                        )
+
+                    # add up to range_max beams
                     if self.pending_groups:
-                        for _ in random(range(self.config.beam_group_size_range)):
+                        for _ in range_max:
                             if self.pending_groups:
                                 self.active_groups.append(self.pending_groups.pop(0))
                     self.delay = self.config.beam_delay
